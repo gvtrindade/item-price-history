@@ -1,0 +1,17 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "book-price-searxng"
+
+server:
+  secret_key: "adb158bbabcf50d22d28ceedc6c3fad40079fd4ee5ae2bad930184a0c87aa089"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  formats:
+    - html
+    - json

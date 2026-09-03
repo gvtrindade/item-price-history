@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+httpx>=0.27
+
+# openlibrary-client pins stale dependencies that are broken on Python >= 3.10.
+# Install openlibrary-client first (see README), then these override its pins.
+six>=1.16.0
+requests>=2.28.0
+urllib3>=1.26.0
