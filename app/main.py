@@ -1,62 +1,29 @@
 """Book Price Finder API.
 
-Receives an ISBN + webhook URL, looks up the book title on Open Library
-(via openlibrary-client) and delivers the result -- or the error -- to the
-webhook.
+Flow:
+  1. Receive either an ISBN, or a title + author, plus the book's
+     conservation state and a webhook URL.
+  2. Resolve the missing book data via Open Library (title/author from an
+     ISBN, or ISBN from title/author).
+  3. Ask a llama.cpp instance (OpenAI-compatible /v1/chat/completions) to
+     search the Brazilian web through SearXNG for new/used prices in BRL
+     and return an estimated value for the (always used) copy as JSON.
+  4. Deliver the estimate (isbn, title, author, price, estimated value) --
+     or the error -- to the webhook.
 """
 
 from __future__ import annotations
 
-import logging
-import re
-
-import httpx
 from fastapi import FastAPI
-from olclient.openlibrary import OpenLibrary
-from pydantic import BaseModel, HttpUrl, field_validator
 from starlette.concurrency import run_in_threadpool
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("book_price_finder")
+from app.book_lookup import resolve_book
+from app.config import logger
+from app.schemas import LookupRequest
+from app.valuation import estimate_price
+from app.webhook import deliver_webhook
 
-WEBHOOK_TIMEOUT_SECONDS = 10.0
-
-ISBN_RE = re.compile(r"^(?:\d{9}[\dXx]|\d{13})$")
-
-app = FastAPI(title="Book Price Finder", version="0.1.0")
-
-
-class LookupRequest(BaseModel):
-    isbn: str
-    webhook_url: HttpUrl
-
-    @field_validator("isbn")
-    @classmethod
-    def normalize_isbn(cls, value: str) -> str:
-        value = value.strip().replace("-", "").replace(" ", "")
-        if not ISBN_RE.match(value):
-            raise ValueError("isbn must be a valid ISBN-10 or ISBN-13")
-        return value.upper()
-
-
-def fetch_title(isbn: str) -> str | None:
-    """Blocking lookup via openlibrary-client. Returns None if not found."""
-    ol = OpenLibrary()
-    edition = ol.Edition.get(isbn=isbn)
-    if edition is None:
-        return None
-    return edition.title
-
-
-async def deliver_webhook(url: str, payload: dict) -> bool:
-    try:
-        async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS) as client:
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
-        return True
-    except httpx.HTTPError as exc:
-        logger.error("Webhook delivery to %s failed: %s", url, exc)
-        return False
+app = FastAPI(title="Book Price Finder", version="0.2.0")
 
 
 @app.get("/health")
@@ -66,23 +33,62 @@ async def health() -> dict:
 
 @app.post("/lookup")
 async def lookup(request: LookupRequest) -> dict:
-    isbn = request.isbn
     try:
-        title = await run_in_threadpool(fetch_title, isbn)
-        if title is None:
-            payload = {
-                "isbn": isbn,
-                "status": "error",
-                "error": "Book not found in Open Library",
-            }
-        else:
-            payload = {"isbn": isbn, "status": "ok", "title": title}
-    except Exception as exc:
-        logger.exception("Open Library lookup failed for isbn=%s", isbn)
+        book = await run_in_threadpool(
+            resolve_book, request.isbn, request.title, request.author
+        )
+    except LookupError as exc:
         payload = {
-            "isbn": isbn,
+            "isbn": request.isbn,
+            "title": request.title,
+            "author": request.author,
+            "status": "error",
+            "error": str(exc),
+        }
+        delivered = await deliver_webhook(str(request.webhook_url), payload)
+        return {"webhook_delivered": delivered, **payload}
+    except Exception as exc:
+        logger.exception(
+            "Open Library lookup failed for isbn=%s title=%s", request.isbn, request.title
+        )
+        payload = {
+            "isbn": request.isbn,
+            "title": request.title,
+            "author": request.author,
             "status": "error",
             "error": f"Open Library lookup failed: {exc}",
+        }
+        delivered = await deliver_webhook(str(request.webhook_url), payload)
+        return {"webhook_delivered": delivered, **payload}
+
+    try:
+        valuation = await estimate_price(book, request.conservation_state)
+        payload = {
+            "isbn": book["isbn"],
+            "title": book["title"],
+            "author": book["author"],
+            "conservation_state": request.conservation_state,
+            "status": "ok" if valuation.get("estimated_value") is not None else "error",
+            "price": (
+                valuation["used_price"]
+                if valuation.get("used_price") is not None
+                else valuation.get("new_price")
+            ),
+            "new_price": valuation.get("new_price"),
+            "used_price": valuation.get("used_price"),
+            "estimated_value": valuation.get("estimated_value"),
+            "currency": valuation.get("currency"),
+            "summary": valuation.get("summary"),
+        }
+        if payload["status"] == "error":
+            payload["error"] = "No BRL price found for this book in Brazilian listings"
+    except Exception as exc:
+        logger.exception("Price estimation failed for isbn=%s", book["isbn"])
+        payload = {
+            **book,
+            "conservation_state": request.conservation_state,
+            "status": "error",
+            "error": f"Price estimation failed: {type(exc).__name__}: {exc}",
         }
 
     delivered = await deliver_webhook(str(request.webhook_url), payload)
