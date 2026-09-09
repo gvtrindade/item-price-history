@@ -6,7 +6,7 @@ import json
 import re
 
 from app.config import LLM_MAX_SEARCHES, LLM_MAX_TOOL_ROUNDS, USED_FALLBACK_RATIO
-from app.llamacpp import VALUATION_SYSTEM_PROMPT, call_llamacpp
+from app.llamacpp import VALUATION_SYSTEM_PROMPT, call_llm
 from app.searxng import run_search
 
 JSON_DECODER = json.JSONDecoder()
@@ -110,7 +110,7 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
     seen_queries: set[str] = set()
 
     for _ in range(LLM_MAX_TOOL_ROUNDS):
-        reply = await call_llamacpp(messages)
+        reply = await call_llm(messages)
 
         # Native tool calls (if the server runs with a tool-call parser).
         tool_calls = reply.get("tool_calls") or []

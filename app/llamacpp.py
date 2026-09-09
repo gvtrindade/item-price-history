@@ -1,4 +1,4 @@
-"""llama.cpp client (OpenAI-compatible /v1/chat/completions) and prompts."""
+"""LLM client (OpenAI-compatible /v1/chat/completions) and prompts."""
 
 from __future__ import annotations
 
@@ -8,6 +8,11 @@ from app.config import (
     LLAMA_CPP_BASE_URL,
     LLAMA_CPP_MODEL,
     LLAMA_CPP_TIMEOUT_SECONDS,
+    LLM_PROVIDER,
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
+    OPENROUTER_MODEL,
+    OPENROUTER_TIMEOUT_SECONDS,
 )
 
 VALUATION_SYSTEM_PROMPT = """\
@@ -65,3 +70,34 @@ async def call_llamacpp(messages: list[dict], tools: list[dict] | None = None) -
         )
         response.raise_for_status()
         return response.json()["choices"][0]["message"]
+
+
+async def call_openrouter(messages: list[dict], tools: list[dict] | None = None) -> dict:
+    """Send a chat completion request to OpenRouter and return the assistant message."""
+    payload: dict = {
+        "model": OPENROUTER_MODEL,
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 160,
+        "stop": ["\n\n"],
+        "stream": False,
+    }
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
+    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
+    async with httpx.AsyncClient(timeout=OPENROUTER_TIMEOUT_SECONDS) as client:
+        response = await client.post(
+            f"{OPENROUTER_BASE_URL}/v1/chat/completions",
+            json=payload,
+            headers=headers,
+        )
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]
+
+
+async def call_llm(messages: list[dict], tools: list[dict] | None = None) -> dict:
+    """Dispatch to the configured LLM provider."""
+    if LLM_PROVIDER == "openrouter":
+        return await call_openrouter(messages, tools)
+    return await call_llamacpp(messages, tools)

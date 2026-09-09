@@ -11,9 +11,17 @@ logger = logging.getLogger("book_price_finder")
 
 WEBHOOK_TIMEOUT_SECONDS = 10.0
 
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "llamacpp").lower()
+
 LLAMA_CPP_BASE_URL = os.getenv("LLAMA_CPP_BASE_URL", "http://localhost:8081").rstrip("/")
 LLAMA_CPP_MODEL = os.getenv("LLAMA_CPP_MODEL", "local-model")
 LLAMA_CPP_TIMEOUT_SECONDS = float(os.getenv("LLAMA_CPP_TIMEOUT_SECONDS", "180"))
+
+OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api").rstrip("/")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_TIMEOUT_SECONDS = float(os.getenv("OPENROUTER_TIMEOUT_SECONDS", "180"))
+
 LLM_MAX_TOOL_ROUNDS = 8
 LLM_MAX_SEARCHES = 3
 
