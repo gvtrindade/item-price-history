@@ -39,9 +39,9 @@ async def _process_lookup(request: LookupRequest) -> None:
         )
     except LookupError as exc:
         payload = {
-            "isbn": request.isbn,
-            "title": request.title,
-            "author": request.author,
+            "isbn": request.isbn or "",
+            "title": request.title or "",
+            "author": request.author or "",
             "status": "error",
             "error": str(exc),
         }
@@ -52,9 +52,9 @@ async def _process_lookup(request: LookupRequest) -> None:
             "Open Library lookup failed for isbn=%s title=%s", request.isbn, request.title
         )
         payload = {
-            "isbn": request.isbn,
-            "title": request.title,
-            "author": request.author,
+            "isbn": request.isbn or "",
+            "title": request.title or "",
+            "author": request.author or "",
             "status": "error",
             "error": f"Open Library lookup failed: {exc}",
         }
@@ -64,9 +64,9 @@ async def _process_lookup(request: LookupRequest) -> None:
     try:
         valuation = await estimate_price(book, request.conservation_state)
         payload = {
-            "isbn": book["isbn"],
-            "title": book["title"],
-            "author": book["author"],
+            "isbn": book.get("isbn") or "",
+            "title": book.get("title") or "",
+            "author": book.get("author") or "",
             "conservation_state": request.conservation_state,
             "status": "ok" if valuation.get("estimated_value") is not None else "error",
             "price": (
@@ -86,6 +86,9 @@ async def _process_lookup(request: LookupRequest) -> None:
         logger.exception("Price estimation failed for isbn=%s", book["isbn"])
         payload = {
             **book,
+            "isbn": book.get("isbn") or "",
+            "title": book.get("title") or "",
+            "author": book.get("author") or "",
             "conservation_state": request.conservation_state,
             "status": "error",
             "error": f"Price estimation failed: {type(exc).__name__}: {exc}",
