@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 
-from app.config import LLM_MAX_SEARCHES, LLM_MAX_TOOL_ROUNDS, USED_FALLBACK_RATIO
+from app.config import LLM_MAX_SEARCHES, LLM_MAX_TOOL_ROUNDS, USED_FALLBACK_RATIO, logger
 from app.llamacpp import VALUATION_SYSTEM_PROMPT, call_llm
 from app.searxng import run_search
 
@@ -109,7 +109,8 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
     nudged = False
     seen_queries: set[str] = set()
 
-    for _ in range(LLM_MAX_TOOL_ROUNDS):
+    for round_num in range(LLM_MAX_TOOL_ROUNDS):
+        logger.info(f"Valuation round {round_num + 1}/{LLM_MAX_TOOL_ROUNDS}")
         reply = await call_llm(messages)
 
         # Native tool calls (if the server runs with a tool-call parser).
@@ -141,18 +142,24 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
 
         # JSON action protocol (works with any model, no tool parser needed).
         raw = reply.get("content") or ""
+        logger.debug(f"Round {round_num + 1} LLM response: {raw}")
         messages.append({"role": "assistant", "content": raw})
         try:
             action = extract_json(raw)
-        except ValueError:
+        except ValueError as e:
+            logger.warning(f"Failed to extract JSON from response: {e}")
             action = {}
         query = None
         if (action.get("action") or "").lower() == "search":
             query = action.get("query")
         elif isinstance(action.get("search"), str):  # common mis-format
             query = action["search"]
+        if isinstance(query, str):
+            query = re.sub(r"[<>]", " ", query)
+            query = re.sub(r"\s+", " ", query).strip()
         if isinstance(query, str) and query.strip():
             key = query.casefold().strip()
+            logger.info(f"Search action extracted: {query!r}")
             if key in seen_queries:
                 messages.append(
                     {
@@ -198,6 +205,7 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
                 )
             ):
                 nudged = True
+                logger.info("No prices found yet, nudging LLM to search more")
                 messages.append(
                     {
                         "role": "user",
@@ -209,7 +217,9 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
                     }
                 )
                 continue
+            logger.info(f"Valuation complete: {valuation}")
             return constrain_valuation(valuation)
+        logger.warning(f"Round {round_num + 1}: no valid valuation or search action, retrying")
         messages.append(
             {
                 "role": "user",
@@ -221,4 +231,5 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
             }
         )
 
+    logger.error(f"LLM did not produce a valuation after {LLM_MAX_TOOL_ROUNDS} rounds")
     raise RuntimeError("LLM did not produce a valuation within the search limit")
