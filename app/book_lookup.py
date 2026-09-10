@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from olclient.openlibrary import OpenLibrary
 
-from app.config import ISBN_RE
+from app.config import ISBN_RE, logger
 
 
 def author_names(authors: list) -> str:
@@ -47,8 +47,10 @@ def resolve_book(isbn: str | None, title: str | None, author: str | None) -> dic
     """Blocking lookup of the missing book data. Raises LookupError if not found."""
     ol = OpenLibrary()
     if isbn:
+        logger.info(f"Fetching Open Library edition for isbn={isbn}")
         edition = ol.Edition.get(isbn=isbn)
         if edition is None:
+            logger.warning(f"Open Library has no edition for isbn={isbn}")
             raise LookupError("Book not found in Open Library")
         return {
             "isbn": isbn,
@@ -56,11 +58,14 @@ def resolve_book(isbn: str | None, title: str | None, author: str | None) -> dic
             "author": author_names(edition.authors),
         }
 
+    logger.info(f"Searching Open Library for title={title!r} author={author!r}")
     book = ol.Work.search(title=title, author=author)
     if book is None:
+        logger.warning(f"Open Library has no work for title={title!r} author={author!r}")
         raise LookupError("Book not found in Open Library")
     found_isbn = _find_isbn(ol, book)
     if not found_isbn:
+        logger.warning(f"Open Library work for title={title!r} has no usable ISBN")
         raise LookupError("Matching book has no usable ISBN in Open Library")
     return {
         "isbn": found_isbn,

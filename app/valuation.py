@@ -223,11 +223,11 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
         messages.append(
             {
                 "role": "user",
-                "content": "That reply did not contain a search action or a "
-                "valuation. Answer again with exactly ONE JSON object: "
-                '{"action":"search","query":"..."} or '
-                '{"new_price":...,"used_price":...,"estimated_value":...,'
-                '"currency":"BRL","summary":"..."}.',
+                "content": """
+                    That reply did not contain a search action or a 
+                    valuation. Answer again with exactly ONE JSON object: 
+                        '{"action":"search","query":"..."} or '{"estimated_value":...}.'
+                """
             }
         )
 

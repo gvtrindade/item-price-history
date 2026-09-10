@@ -38,12 +38,16 @@ async def _process_lookup(request: LookupRequest) -> None:
             resolve_book, request.isbn, request.title, request.author
         )
     except LookupError as exc:
+        logger.warning(
+            "Book not found in Open Library: isbn=%s title=%s author=%s (%s)",
+            request.isbn, request.title, request.author, exc,
+        )
         payload = {
             "isbn": request.isbn or "",
             "title": request.title or "",
             "author": request.author or "",
-            "status": "error",
-            "error": str(exc),
+            "conservation_state": request.conservation_state,
+            "status": "not_found",
         }
         await deliver_webhook(str(request.webhook_url), payload)
         return
@@ -67,18 +71,8 @@ async def _process_lookup(request: LookupRequest) -> None:
             "isbn": book.get("isbn") or "",
             "title": book.get("title") or "",
             "author": book.get("author") or "",
-            "conservation_state": request.conservation_state,
             "status": "ok" if valuation.get("estimated_value") is not None else "error",
-            "price": (
-                valuation["used_price"]
-                if valuation.get("used_price") is not None
-                else valuation.get("new_price")
-            ),
-            "new_price": valuation.get("new_price"),
-            "used_price": valuation.get("used_price"),
             "estimated_value": valuation.get("estimated_value"),
-            "currency": valuation.get("currency"),
-            "summary": valuation.get("summary"),
         }
         if payload["status"] == "error":
             payload["error"] = "No BRL price found for this book in Brazilian listings"
@@ -89,7 +83,6 @@ async def _process_lookup(request: LookupRequest) -> None:
             "isbn": book.get("isbn") or "",
             "title": book.get("title") or "",
             "author": book.get("author") or "",
-            "conservation_state": request.conservation_state,
             "status": "error",
             "error": f"Price estimation failed: {type(exc).__name__}: {exc}",
         }
