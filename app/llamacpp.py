@@ -138,18 +138,30 @@ async def call_llamacpp(messages: list[dict], tools: list[dict] | None = None) -
         payload["tool_choice"] = "auto"
     logger.info(f"Calling llama.cpp at {LLAMA_CPP_BASE_URL} with model {LLAMA_CPP_MODEL}")
     try:
-        await _throttle_llm_calls()
-        async with httpx.AsyncClient(timeout=LLAMA_CPP_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                f"{LLAMA_CPP_BASE_URL}/v1/chat/completions", json=payload
-            )
+        result = None
+        for attempt in range(1, 4):
+            await _throttle_llm_calls()
+            async with httpx.AsyncClient(timeout=LLAMA_CPP_TIMEOUT_SECONDS) as client:
+                response = await client.post(
+                    f"{LLAMA_CPP_BASE_URL}/v1/chat/completions", json=payload
+                )
+            if response.status_code == 400 and attempt < 3:
+                # llama.cpp sometimes 400s transiently (context pressure,
+                # sampler race); retry the same request before giving up.
+                logger.warning(
+                    "llama.cpp returned 400 (attempt %d/3), retrying: %s",
+                    attempt, response.text[:200],
+                )
+                await _sleep(2**attempt)
+                continue
             response.raise_for_status()
             result = response.json()["choices"][0]["message"]
-            if not (result.get("content") or "").strip() and result.get("reasoning_content"):
-                # Older servers ignore chat_template_kwargs; salvage text from CoT.
-                result["content"] = result["reasoning_content"]
-            logger.info(f"llama.cpp response: {(result.get('content') or '')[:100]}...")
-            return result
+            break
+        if not (result.get("content") or "").strip() and result.get("reasoning_content"):
+            # Older servers ignore chat_template_kwargs; salvage text from CoT.
+            result["content"] = result["reasoning_content"]
+        logger.info(f"llama.cpp response: {(result.get('content') or '')[:100]}...")
+        return result
     except Exception as e:
         logger.error(f"llama.cpp call failed: {e}")
         raise
@@ -346,7 +358,7 @@ async def _openrouter_request(
     messages: list[dict],
     tools: list[dict],
 ) -> dict:
-    """One model's slot: 3 tries on transient errors; 429 advances the chain."""
+    """One model's slot: 3 tries on 400/5xx; 429 advances the chain immediately."""
     url = f"{base_url}/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -371,13 +383,18 @@ async def _openrouter_request(
             if response.status_code == 429:
                 raise _ModelUnavailableError(model, "rate limited (429)", rate_limited=True)
 
-            if response.status_code >= 500:
-                last_error = RuntimeError(f"status {response.status_code}")
+            if response.status_code == 400 or response.status_code >= 500:
+                # OpenRouter proxies provider errors as 400s; treat them as
+                # transient: retry this model, then advance the chain.
+                last_error = RuntimeError(
+                    f"status {response.status_code}: {response.text[:200]}"
+                )
                 logger.warning(
-                    "%s model %s attempt %d got status %d", label, model, attempt, response.status_code
+                    "%s model %s attempt %d got status %d",
+                    label, model, attempt, response.status_code,
                 )
                 if attempt < 3:
-                    await _sleep(2 ** attempt)
+                    await _sleep(2**attempt)
                 continue
 
             if response.status_code == 401:
