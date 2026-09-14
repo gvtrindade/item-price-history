@@ -6,6 +6,10 @@ import logging
 import os
 import re
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("book_price_finder")
 
@@ -46,8 +50,8 @@ SEARXNG_MAX_RESULTS = 5
 SEARXNG_COUNTRY = os.getenv("SEARXNG_COUNTRY", "br")
 SEARXNG_LANGUAGE = os.getenv("SEARXNG_LANGUAGE", "pt-BR")
 
-# All books to be valued are used copies; without a used-price sighting,
-# the value falls back to this fraction of the new-copy price.
-USED_FALLBACK_RATIO = 0.40
+GOOGLE_BOOKS_BASE_URL = "https://www.googleapis.com/books/v1"
+GOOGLE_BOOKS_TIMEOUT_SECONDS = 10.0
+GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY", "")
 
 ISBN_RE = re.compile(r"^(?:\d{9}[\dXx]|\d{13})$")

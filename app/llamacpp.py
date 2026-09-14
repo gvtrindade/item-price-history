@@ -30,21 +30,15 @@ from app.config import (
 from app.searxng import run_search
 
 VALUATION_SYSTEM_PROMPT = """\
-You are a used-book pricing assistant. The book to be valued is ALWAYS a
-USED copy, in the conservation state given. Conservation states are:
-- As New: Pristine, original condition as when published. No defects.
-- Near Fine (FN): Approaching As New with very minor defects.
-- Good (G): Average wear, complete text, intact and readable, shows signs of use.
-- Fair: Worn but complete text pages, may lack endpapers/half-title, significant wear on binding/jacket.
-Adjust the estimated_value based on the conservation state: better condition = higher value relative to used_price.
-Given its ISBN, title and author, find the book's current prices on the BRAZILIAN internet:
+You are a book pricing assistant. Given a book's ISBN, title and author,
+find its current prices on the BRAZILIAN internet:
 - the price of a NEW copy (new_price);
 - the price of USED copies (used_price), e.g. on Estante Virtual,
   Mercado Livre, sebos, Amazon.com.br, Americanas or Shopee Brasil.
 All prices MUST come from Brazilian listings and be in BRL (R$); never
 use prices quoted in another currency. Prefer Portuguese queries: combine
 the book's title and author with price terms, e.g. "O Cortiço Aluísio
-Azevedo preço sebo usado", "Dom Casmurro Machado de Assis mercado livre
+Azevedo preço sebo usado", "Dom Casmurmo Machado de Assis mercado livre
 R$" or "Memórias Póstumas comprar preço" (never wrap words in angle
 brackets), and try the translated Brazilian title when it differs (e.g.
 "Crime e Castigo"). Snippets from Mercado
@@ -59,16 +53,8 @@ exactly ONE JSON object and no other text. Per turn, either:
   {"action": "search", "query": "<search terms>"}   -> to run a web search
   (one search per turn; issue several until you have enough price data)
 or, when you are done searching:
-  {"new_price": <number, price of a new copy in BRL>,
-   "used_price": <number in BRL, or null if no used copy price was found>,
-   "estimated_value": <number in BRL, this used copy's value adjusted for its conservation state>,
-   "currency": "BRL",
-   "summary": "<one short sentence explaining the estimate>"}
-Strict rules for estimated_value:
-- It must NEVER be greater than new_price.
-- If no used_price was found, it MUST be exactly 40% of new_price.
-- When used_price was found, base the estimate on it, adjusted (usually
-  downwards) for the conservation state."""
+  {"new_price": <number, price of a new copy in BRL, or null>,
+   "used_price": <number, price of a used copy in BRL, or null>}"""
 
 
 SEARXNG_SEARCH_TOOL = {
@@ -252,8 +238,7 @@ async def call_openrouter(messages: list[dict], tools: list[dict] | None = None)
                 "role": "user",
                 "content": "That reply had no search action and no valuation. "
                 "Answer with exactly ONE JSON object: "
-                '{"new_price":...,"used_price":...,"estimated_value":...,'
-                '"currency":"BRL","summary":"..."}.',
+                '{"new_price":...,"used_price":...,"currency":"BRL"}.',
             }
         )
 

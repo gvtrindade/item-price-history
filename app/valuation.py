@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import re
 
-from app.config import LLM_MAX_SEARCHES, LLM_MAX_TOOL_ROUNDS, USED_FALLBACK_RATIO, logger
+from app.config import LLM_MAX_SEARCHES, LLM_MAX_TOOL_ROUNDS, logger
 from app.llamacpp import VALUATION_SYSTEM_PROMPT, call_llm
 from app.searxng import run_search
 
 JSON_DECODER = json.JSONDecoder()
 
-VALUATION_KEYS = ("estimated_value", "new_price", "used_price")
+VALUATION_KEYS = ("new_price", "used_price")
 
 
 def extract_json(text: str) -> dict:
@@ -68,25 +68,43 @@ def salvage_valuation(text: str) -> dict | None:
     return salvaged
 
 
-def constrain_valuation(valuation: dict) -> dict:
-    """Enforce the pricing rules regardless of what the LLM returned."""
+_CONDITION_RATIOS = {
+    "as new": 0.40,
+    "near fine": 0.60,
+    "good": 0.70,
+    "fair": 0.80,
+}
+
+_MIN_ESTIMATED_PRICE = 2.0
+
+
+def set_estimated_price(valuation: dict, conservation_state: str) -> dict:
     new_price = _as_price(valuation.get("new_price"))
     used_price = _as_price(valuation.get("used_price"))
-    estimated = _as_price(valuation.get("estimated_value"))
 
     if used_price is None and new_price is not None:
-        estimated = new_price * USED_FALLBACK_RATIO
-    elif estimated is None:
-        estimated = used_price if used_price is not None else new_price
-    if new_price is not None and estimated is not None and estimated > new_price:
-        estimated = new_price
+        valuation["used_price"] = round(new_price * 0.70, 2)
+        return set_estimated_price(valuation, conservation_state)
 
-    valuation["new_price"] = new_price
-    valuation["used_price"] = used_price
+    if used_price is not None:
+        state = conservation_state.lower()
+        ratio = 0.70
+        for keyword, r in _CONDITION_RATIOS.items():
+            if keyword in state:
+                ratio = r
+                break
+        estimated = max(used_price * ratio, _MIN_ESTIMATED_PRICE)
+        valuation["estimated_value"] = round(estimated, 2)
+    else:
+        valuation["estimated_value"] = None
+
+    return valuation
+
+
+def constrain_valuation(valuation: dict) -> dict:
+    valuation["new_price"] = _as_price(valuation.get("new_price"))
+    valuation["used_price"] = _as_price(valuation.get("used_price"))
     valuation["currency"] = "BRL"
-    valuation["estimated_value"] = (
-        round(estimated, 2) if estimated is not None else None
-    )
     return valuation
 
 
@@ -100,7 +118,6 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
                 f"ISBN: {book['isbn']}\n"
                 f"Title: {book['title']}\n"
                 f"Author: {book['author']}\n"
-                f"Conservation state: {conservation_state}\n"
                 "Search Brazilian websites for prices in BRL and reply with the valuation JSON."
             ),
         },
@@ -201,7 +218,7 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
                 not nudged
                 and not any(
                     _as_price(valuation.get(k))
-                    for k in ("new_price", "used_price", "estimated_value")
+                    for k in ("new_price", "used_price")
                 )
             ):
                 nudged = True
@@ -218,15 +235,16 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
                 )
                 continue
             logger.info(f"Valuation complete: {valuation}")
-            return constrain_valuation(valuation)
+            valuation = constrain_valuation(valuation)
+            return set_estimated_price(valuation, conservation_state)
         logger.warning(f"Round {round_num + 1}: no valid valuation or search action, retrying")
         messages.append(
             {
                 "role": "user",
                 "content": """
-                    That reply did not contain a search action or a 
-                    valuation. Answer again with exactly ONE JSON object: 
-                        '{"action":"search","query":"..."} or '{"estimated_value":...}.'
+                    That reply did not contain a search action or a
+                    valuation. Answer again with exactly ONE JSON object:
+                        '{"action":"search","query":"..."} or '{"new_price":...,"used_price":...}.'
                 """
             }
         )
