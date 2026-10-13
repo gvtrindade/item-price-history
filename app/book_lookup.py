@@ -116,40 +116,61 @@ def _google_books_search(isbn: str | None = None, title: str | None = None, auth
     }
 
 
-def resolve_book(isbn: str | None, title: str | None, author: str | None) -> dict:
-    """Blocking lookup of the missing book data. Raises LookupError if not found."""
+def _open_library_lookup(isbn: str | None, title: str | None, author: str | None) -> dict:
+    """Lookup book data on Open Library. Raises LookupError if not found."""
     ol = OpenLibrary()
-    try:
-        if isbn:
-            logger.info(f"Fetching Open Library edition for isbn={isbn}")
-            edition = ol.Edition.get(isbn=isbn)
-            if edition is None:
-                logger.warning(f"Open Library has no edition for isbn={isbn}")
-                raise LookupError("Book not found in Open Library")
-            return {
-                "isbn": isbn,
-                "title": edition.title,
-                "author": author_names(edition.authors),
-            }
-
-        logger.info(f"Searching Open Library for title={title!r} author={author!r}")
-        book = ol.Work.search(title=title, author=author)
-        if book is None:
-            logger.warning(f"Open Library has no work for title={title!r} author={author!r}")
+    if isbn:
+        logger.info(f"Fetching Open Library edition for isbn={isbn}")
+        edition = ol.Edition.get(isbn=isbn)
+        if edition is None:
+            logger.warning(f"Open Library has no edition for isbn={isbn}")
             raise LookupError("Book not found in Open Library")
-        found_isbn = _find_isbn(ol, book)
-        if not found_isbn:
-            logger.warning(f"Open Library work for title={title!r} has no usable ISBN")
-            raise LookupError("Matching book has no usable ISBN in Open Library")
         return {
-            "isbn": found_isbn,
-            "title": book.title,
-            "author": author_names(book.authors) or (author or ""),
+            "isbn": isbn,
+            "title": edition.title,
+            "author": author_names(edition.authors),
         }
-    except LookupError:
-        logger.info("Open Library failed, trying Google Books fallback")
+
+    logger.info(f"Searching Open Library for title={title!r} author={author!r}")
+    book = ol.Work.search(title=title, author=author)
+    if book is None:
+        logger.warning(f"Open Library has no work for title={title!r} author={author!r}")
+        raise LookupError("Book not found in Open Library")
+    found_isbn = _find_isbn(ol, book)
+    if not found_isbn:
+        logger.warning(f"Open Library work for title={title!r} has no usable ISBN")
+        raise LookupError("Matching book has no usable ISBN in Open Library")
+    return {
+        "isbn": found_isbn,
+        "title": book.title,
+        "author": author_names(book.authors) or (author or ""),
+    }
+
+
+def resolve_book(isbn: str | None, title: str | None, author: str | None) -> dict:
+    try:
+        book = _open_library_lookup(isbn, title, author)
+    except Exception as exc:
+        logger.info(f"Open Library lookup failed ({exc}), trying Google Books fallback")
         result = _google_books_search(isbn=isbn, title=title, author=author)
         if result and result.get("title"):
             logger.info(f"Google Books found: {result}")
             return result
         raise
+
+    if not book.get("categories"):
+        logger.info("Open Library returned no categories, trying Google Books")
+        try:
+            fallback = _google_books_search(
+                isbn=book.get("isbn") or isbn,
+                title=book.get("title") or title,
+                author=book.get("author") or author,
+            )
+        except Exception as exc:
+            logger.warning(f"Google Books category lookup failed: {exc}")
+            fallback = None
+        if fallback and fallback.get("categories"):
+            logger.info(f"Google Books provided categories: {fallback['categories']}")
+            book["categories"] = fallback["categories"]
+
+    return book

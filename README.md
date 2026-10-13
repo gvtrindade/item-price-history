@@ -12,6 +12,8 @@ the book's price and estimate the copy's value, and delivers the result --
 ```
 POST /lookup {isbn | title+author, conservation_state, webhook_url}
   -> Open Library: fill in the missing title/author or ISBN
+     (Google Books takes over when the book is not found or the lookup
+     fails, e.g. broken author records)
   -> llama.cpp (OpenAI-compatible chat): searches the web through this
      service's SearXNG for new and used prices, adjusts for the
      conservation state, answers with JSON {new_price, used_price,
