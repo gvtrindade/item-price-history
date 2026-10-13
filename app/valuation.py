@@ -108,16 +108,16 @@ def constrain_valuation(valuation: dict) -> dict:
     return valuation
 
 
-async def estimate_price(book: dict, conservation_state: str) -> dict:
+async def estimate_price(product: dict, conservation_state: str) -> dict:
     """Drive the llama.cpp <-> SearXNG loop until it returns the valuation JSON."""
     messages = [
         {"role": "system", "content": VALUATION_SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                f"ISBN: {book['isbn']}\n"
-                f"Title: {book['title']}\n"
-                f"Author: {book['author']}\n"
+                f"Code: {product['code']}\n"
+                f"Title: {product['title']}\n"
+                f"Author: {product['author']}\n"
                 "Search Brazilian websites for prices in BRL and reply with the valuation JSON."
             ),
         },
@@ -228,8 +228,8 @@ async def estimate_price(book: dict, conservation_state: str) -> dict:
                         "role": "user",
                         "content": (
                             "No price was found yet. Run more searches before "
-                            f'answering, e.g. "{book["title"]} {book["author"]} '
-                            f'mercado livre R$" or "{book["title"]} preço comprar sebo".'
+                            f'answering, e.g. "{product["title"]} {product["author"]} '
+                            f'mercado livre R$" or "{product["title"]} preço comprar sebo".'
                         ),
                     }
                 )

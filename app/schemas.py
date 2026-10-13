@@ -4,24 +4,24 @@ from __future__ import annotations
 
 from pydantic import BaseModel, HttpUrl, field_validator, model_validator
 
-from app.config import ISBN_RE
+from app.config import CODE_RE
 
 
 class LookupRequest(BaseModel):
-    isbn: str | None = None
+    code: str | None = None
     title: str | None = None
     author: str | None = None
     conservation_state: str
     webhook_url: HttpUrl
 
-    @field_validator("isbn")
+    @field_validator("code")
     @classmethod
-    def normalize_isbn(cls, value: str | None) -> str | None:
+    def normalize_code(cls, value: str | None) -> str | None:
         if value is None:
             return None
         value = value.strip().replace("-", "").replace(" ", "")
-        if not ISBN_RE.match(value):
-            raise ValueError("isbn must be a valid ISBN-10 or ISBN-13")
+        if not CODE_RE.match(value):
+            raise ValueError("code must be a valid ISBN-10 or ISBN-13")
         return value.upper()
 
     @field_validator("conservation_state")
@@ -34,6 +34,6 @@ class LookupRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_identifier(self) -> "LookupRequest":
-        if not self.isbn and not (self.title and self.author):
-            raise ValueError("provide either 'isbn' or both 'title' and 'author'")
+        if not self.code and not (self.title and self.author):
+            raise ValueError("provide either 'code' or both 'title' and 'author'")
         return self

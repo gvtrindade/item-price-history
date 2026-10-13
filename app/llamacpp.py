@@ -30,14 +30,14 @@ from app.config import (
 from app.searxng import run_search
 
 VALUATION_SYSTEM_PROMPT = """\
-You are a book pricing assistant. Given a book's ISBN, title and author,
+You are a product pricing assistant. Given a product's code, title and author,
 find its current prices on the BRAZILIAN internet:
 - the price of a NEW copy (new_price);
 - the price of USED copies (used_price), e.g. on Estante Virtual,
   Mercado Livre, sebos, Amazon.com.br, Americanas or Shopee Brasil.
 All prices MUST come from Brazilian listings and be in BRL (R$); never
 use prices quoted in another currency. Prefer Portuguese queries: combine
-the book's title and author with price terms, e.g. "O Cortiço Aluísio
+the product's title and author with price terms, e.g. "O Cortiço Aluísio
 Azevedo preço sebo usado", "Dom Casmurmo Machado de Assis mercado livre
 R$" or "Memórias Póstumas comprar preço" (never wrap words in angle
 brackets), and try the translated Brazilian title when it differs (e.g.
@@ -64,7 +64,7 @@ SEARXNG_SEARCH_TOOL = {
         "description": (
             "Search the web through a local SearXNG instance (Brazilian "
             "listings, pt-BR). Use it to find current BRL prices for the "
-            "book; one query per call."
+            "product; one query per call."
         ),
         "parameters": {
             "type": "object",

@@ -11,7 +11,7 @@ from app.config import (
     GOOGLE_BOOKS_API_KEY,
     GOOGLE_BOOKS_BASE_URL,
     GOOGLE_BOOKS_TIMEOUT_SECONDS,
-    ISBN_RE,
+    CODE_RE,
     logger,
 )
 
@@ -27,18 +27,18 @@ def author_names(authors: list) -> str:
     return ", ".join(name for name in names if name)
 
 
-def _normalize_isbn(raw: str) -> str | None:
+def _normalize_code(raw: str) -> str | None:
     candidate = raw.strip().replace("-", "").upper()
-    return candidate if ISBN_RE.match(candidate) else None
+    return candidate if CODE_RE.match(candidate) else None
 
 
-def _find_isbn(ol: OpenLibrary, book) -> str | None:
-    for raw in book.identifiers.get("isbns") or []:
-        isbn = _normalize_isbn(raw)
-        if isbn:
-            return isbn
+def _find_code(ol: OpenLibrary, product) -> str | None:
+    for raw in product.identifiers.get("isbns") or []:
+        code = _normalize_code(raw)
+        if code:
+            return code
     # Work-level search docs often have no isbns: check its editions.
-    work_olid = (book.identifiers.get("olid") or [None])[0]
+    work_olid = (product.identifiers.get("olid") or [None])[0]
     if not work_olid:
         return None
     response = ol.session.get(
@@ -46,16 +46,16 @@ def _find_isbn(ol: OpenLibrary, book) -> str | None:
     )
     for entry in response.json().get("entries", []):
         for raw in entry.get("isbn_13", []) + entry.get("isbn_10", []):
-            isbn = _normalize_isbn(raw)
-            if isbn:
-                return isbn
+            code = _normalize_code(raw)
+            if code:
+                return code
     return None
 
 
-def _google_books_search(isbn: str | None = None, title: str | None = None, author: str | None = None) -> dict | None:
-    """Search Google Books API. Returns dict with isbn/title/author or None."""
-    if isbn:
-        query = f"isbn:{isbn}"
+def _google_books_search(code: str | None = None, title: str | None = None, author: str | None = None) -> dict | None:
+    """Search Google Books API. Returns dict with code/title/author or None."""
+    if code:
+        query = f"isbn:{code}"
     elif title:
         parts = [f'intitle:"{title}"']
         if author:
@@ -95,82 +95,82 @@ def _google_books_search(isbn: str | None = None, title: str | None = None, auth
         return None
 
     volume = items[0].get("volumeInfo", {})
-    found_isbn = None
+    found_code = None
     for identifier in volume.get("industryIdentifiers", []):
         if identifier.get("type") == "ISBN_13":
-            found_isbn = _normalize_isbn(identifier.get("identifier", ""))
-            if found_isbn:
+            found_code = _normalize_code(identifier.get("identifier", ""))
+            if found_code:
                 break
-    if not found_isbn:
+    if not found_code:
         for identifier in volume.get("industryIdentifiers", []):
             if identifier.get("type") == "ISBN_10":
-                found_isbn = _normalize_isbn(identifier.get("identifier", ""))
-                if found_isbn:
+                found_code = _normalize_code(identifier.get("identifier", ""))
+                if found_code:
                     break
 
     authors = volume.get("authors", [])
     return {
-        "isbn": found_isbn or isbn or "",
+        "code": found_code or code or "",
         "title": volume.get("title", ""),
         "author": ", ".join(authors) if authors else (author or ""),
     }
 
 
-def _open_library_lookup(isbn: str | None, title: str | None, author: str | None) -> dict:
-    """Lookup book data on Open Library. Raises LookupError if not found."""
+def _open_library_lookup(code: str | None, title: str | None, author: str | None) -> dict:
+    """Lookup product data on Open Library. Raises LookupError if not found."""
     ol = OpenLibrary()
-    if isbn:
-        logger.info(f"Fetching Open Library edition for isbn={isbn}")
-        edition = ol.Edition.get(isbn=isbn)
+    if code:
+        logger.info(f"Fetching Open Library edition for code={code}")
+        edition = ol.Edition.get(isbn=code)
         if edition is None:
-            logger.warning(f"Open Library has no edition for isbn={isbn}")
-            raise LookupError("Book not found in Open Library")
+            logger.warning(f"Open Library has no edition for code={code}")
+            raise LookupError("Product not found in Open Library")
         return {
-            "isbn": isbn,
+            "code": code,
             "title": edition.title,
             "author": author_names(edition.authors),
         }
 
     logger.info(f"Searching Open Library for title={title!r} author={author!r}")
-    book = ol.Work.search(title=title, author=author)
-    if book is None:
+    product = ol.Work.search(title=title, author=author)
+    if product is None:
         logger.warning(f"Open Library has no work for title={title!r} author={author!r}")
-        raise LookupError("Book not found in Open Library")
-    found_isbn = _find_isbn(ol, book)
-    if not found_isbn:
+        raise LookupError("Product not found in Open Library")
+    found_code = _find_code(ol, product)
+    if not found_code:
         logger.warning(f"Open Library work for title={title!r} has no usable ISBN")
-        raise LookupError("Matching book has no usable ISBN in Open Library")
+        raise LookupError("Matching product has no usable ISBN in Open Library")
     return {
-        "isbn": found_isbn,
-        "title": book.title,
-        "author": author_names(book.authors) or (author or ""),
+        "code": found_code,
+        "title": product.title,
+        "author": author_names(product.authors) or (author or ""),
     }
 
 
-def resolve_book(isbn: str | None, title: str | None, author: str | None) -> dict:
+def resolve_product(code: str | None, title: str | None, author: str | None) -> dict:
     try:
-        book = _open_library_lookup(isbn, title, author)
+        product = _open_library_lookup(code, title, author)
     except Exception as exc:
         logger.info(f"Open Library lookup failed ({exc}), trying Google Books fallback")
-        result = _google_books_search(isbn=isbn, title=title, author=author)
+        result = _google_books_search(code=code, title=title, author=author)
         if result and result.get("title"):
             logger.info(f"Google Books found: {result}")
             return result
         raise
 
-    if not book.get("categories"):
+    if not product.get("categories"):
         logger.info("Open Library returned no categories, trying Google Books")
         try:
             fallback = _google_books_search(
-                isbn=book.get("isbn") or isbn,
-                title=book.get("title") or title,
-                author=book.get("author") or author,
+                code=product.get("code") or code,
+                title=product.get("title") or title,
+                author=product.get("author") or author,
             )
         except Exception as exc:
             logger.warning(f"Google Books category lookup failed: {exc}")
             fallback = None
         if fallback and fallback.get("categories"):
             logger.info(f"Google Books provided categories: {fallback['categories']}")
-            book["categories"] = fallback["categories"]
+            product["categories"] = fallback["categories"]
 
-    return book
+    return product

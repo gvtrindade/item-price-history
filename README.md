@@ -1,27 +1,27 @@
-# Book Price Finder
+# Product Price Finder
 
-FastAPI service that receives a book (ISBN, or title + author) plus its
+FastAPI service that receives a product (code, or title + author) plus its
 conservation state, resolves the missing data via
 [openlibrary-client](https://github.com/internetarchive/openlibrary-client),
 asks a local **llama.cpp** instance to search the web (via **SearXNG**) for
-the book's price and estimate the copy's value, and delivers the result --
+the product's price and estimate the copy's value, and delivers the result --
 **or the error** -- to a webhook.
 
 ## Flow
 
 ```
-POST /lookup {isbn | title+author, conservation_state, webhook_url}
-  -> Open Library: fill in the missing title/author or ISBN
-     (Google Books takes over when the book is not found or the lookup
+POST /lookup {code | title+author, conservation_state, webhook_url}
+  -> Open Library: fill in the missing title/author or code
+     (Google Books takes over when the product is not found or the lookup
      fails, e.g. broken author records)
   -> llama.cpp (OpenAI-compatible chat): searches the web through this
      service's SearXNG for new and used prices, adjusts for the
      conservation state, answers with JSON {new_price, used_price,
      estimated_value, currency, ...}
-  -> webhook: POST {isbn, title, author, price, estimated_value, ...}
+  -> webhook: POST {code, title, author, price, estimated_value, ...}
 ```
 
-All books are valued as **used copies**, priced in **BRL** from
+All products are valued as **used copies**, priced in **BRL** from
 **Brazilian** listings (SearXNG runs with `country=br&language=pt-BR`).
 The estimated value never exceeds the found new-copy price, and when no
 used-copy price is found it falls back to **40% of the new price**
@@ -69,10 +69,10 @@ Dependencies (started separately):
 ```bash
 curl -X POST http://localhost:8000/lookup \
   -H 'Content-Type: application/json' \
-  -d '{"isbn": "9780140449136", "conservation_state": "used, good condition", "webhook_url": "https://your-hook.example/recv"}'
+  -d '{"code": "9780140449136", "conservation_state": "used, good condition", "webhook_url": "https://your-hook.example/recv"}'
 ```
 
-or let the service find the ISBN:
+or let the service find the code:
 
 ```bash
 curl -X POST http://localhost:8000/lookup \
@@ -84,8 +84,8 @@ Request body:
 
 | field                | description                                          |
 |----------------------|------------------------------------------------------|
-| `isbn`               | ISBN-10 or ISBN-13 (hyphens allowed); **or** give    |
-| `title` + `author`   | book title and author so the ISBN gets resolved      |
+| `code`               | code (ISBN-10 or ISBN-13, hyphens allowed); **or** give |
+| `title` + `author`   | product title and author so the code gets resolved    |
 | `conservation_state` | condition of the (used) copy, e.g. `like new`, `good`, `acceptable, worn` |
 | `webhook_url`        | URL to POST the result to (must be http/https)       |
 
@@ -93,7 +93,7 @@ The webhook receives:
 
 ```json
 {
-  "isbn": "9780140449136",
+  "code": "9780140449136",
   "title": "Crime and punishment",
   "author": "Fiódor Dostoievski",
   "conservation_state": "used, good condition",
@@ -107,10 +107,10 @@ The webhook receives:
 }
 ```
 
-or, on failure (book not found, LLM/SearXNG error, ...):
+or, on failure (product not found, LLM/SearXNG error, ...):
 
 ```json
-{"isbn": "9781234567890", "status": "error", "error": "Book not found in Open Library"}
+{"code": "9781234567890", "status": "error", "error": "Product not found in Open Library"}
 ```
 
 The endpoint's own response echoes the payload plus `webhook_delivered`

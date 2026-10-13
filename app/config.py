@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("book_price_finder")
+logger = logging.getLogger("product_price_finder")
 
 WEBHOOK_TIMEOUT_SECONDS = 10.0
 
@@ -54,4 +54,4 @@ GOOGLE_BOOKS_BASE_URL = "https://www.googleapis.com/books/v1"
 GOOGLE_BOOKS_TIMEOUT_SECONDS = 10.0
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY", "")
 
-ISBN_RE = re.compile(r"^(?:\d{9}[\dXx]|\d{13})$")
+CODE_RE = re.compile(r"^(?:\d{9}[\dXx]|\d{13})$")
