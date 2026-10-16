@@ -8,8 +8,9 @@ Flow:
   3. Ask a llama.cpp instance (OpenAI-compatible /v1/chat/completions) to
      search the Brazilian web through SearXNG for new/used prices in BRL
      and return an estimated value for the (always used) copy as JSON.
-  4. Deliver the estimate (code, title, author, price, estimated value) --
-     or the error -- to the webhook.
+  4. Reserve the copy's external id in the Ziontech (megabazar) catalog.
+  5. Deliver the estimate (code, title, author, price, estimated value,
+     external id) -- or the error -- to the webhook.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from app.config import logger
 from app.schemas import LookupRequest
 from app.valuation import estimate_price
 from app.webhook import deliver_webhook
+from app.ziontech import create_external_id
 
 app = FastAPI(title="Product Price Finder", version="0.2.0")
 
@@ -76,6 +78,19 @@ async def _process_lookup(request: LookupRequest) -> None:
         }
         if payload["status"] == "error":
             payload["error"] = "No BRL price found for this product in Brazilian listings"
+        else:
+            try:
+                external_id = await create_external_id(
+                    product.get("code"),
+                    product.get("title"),
+                    valuation.get("estimated_value"),
+                )
+            except Exception:
+                # Reserving the external id must never invalidate a good valuation.
+                logger.exception("Ziontech external id lookup failed")
+                external_id = None
+            if external_id is not None:
+                payload["external_id"] = external_id
     except Exception as exc:
         logger.exception("Price estimation failed for code=%s", product["code"])
         payload = {

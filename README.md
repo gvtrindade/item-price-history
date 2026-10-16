@@ -63,6 +63,8 @@ Dependencies (started separately):
 | `SEARXNG_BASE_URL`         | `http://localhost:8080`    | SearXNG instance URL          |
 | `SEARXNG_COUNTRY`          | `br`                       | SearXNG country boost         |
 | `SEARXNG_LANGUAGE`         | `pt-BR`                    | SearXNG language/locale       |
+| `ZIONTECH_URL`             | dev megabazar endpoint     | Ziontech catalog endpoint     |
+| `ZIONTECH_TOKEN`           | *(empty)*                  | Ziontech Bearer token (secret)|
 
 ## Usage
 
@@ -102,6 +104,7 @@ The webhook receives:
   "new_price": 59.9,
   "used_price": 39.9,
   "estimated_value": 47.92,
+  "external_id": "12345",
   "currency": "BRL",
   "summary": "Cópias usadas a R$ 39,90 na Estante Virtual; ..."
 }
