@@ -15,6 +15,10 @@ from app.config import (
     logger,
 )
 
+# Google Books is only a fallback, so transient server-side failures must not
+# bubble up and abort the lookup.
+RETRYABLE_GOOGLE_STATUSES = {429, 500, 502, 503, 504}
+
 
 def author_names(authors: list) -> str:
     """Join author names from either Author objects or search-result dicts."""
@@ -69,25 +73,41 @@ def _google_books_search(code: str | None = None, title: str | None = None, auth
         params["key"] = GOOGLE_BOOKS_API_KEY
 
     logger.info(f"Searching Google Books: {query}")
+    data = None
     for attempt in range(3):
         try:
             with httpx.Client(timeout=GOOGLE_BOOKS_TIMEOUT_SECONDS) as client:
                 response = client.get(f"{GOOGLE_BOOKS_BASE_URL}/volumes", params=params)
-                if response.status_code == 429:
-                    wait = 2 ** (attempt + 1)
-                    logger.warning(f"Google Books rate limited, waiting {wait}s")
-                    time.sleep(wait)
-                    continue
-                response.raise_for_status()
-                data = response.json()
-                break
-        except httpx.HTTPStatusError:
-            raise
+            if response.status_code in RETRYABLE_GOOGLE_STATUSES:
+                if attempt == 2:
+                    logger.warning(
+                        f"Google Books returned {response.status_code} after retries"
+                    )
+                    return None
+                wait = 2 ** (attempt + 1)
+                logger.warning(
+                    f"Google Books returned {response.status_code}, waiting {wait}s"
+                )
+                time.sleep(wait)
+                continue
+            if response.status_code >= 400:
+                logger.warning(
+                    f"Google Books request failed with status {response.status_code}"
+                )
+                return None
+            data = response.json()
+            break
         except Exception as exc:
+            # Never propagate Google Books failures: it is only a fallback.
             logger.warning(f"Google Books search failed: {exc}")
-            return None
+            if attempt == 2:
+                return None
+            time.sleep(2 ** (attempt + 1))
     else:
-        logger.warning("Google Books rate limited after retries")
+        logger.warning("Google Books unavailable after retries")
+        return None
+
+    if data is None:
         return None
 
     items = data.get("items", [])
