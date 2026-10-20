@@ -172,7 +172,12 @@ def resolve_product(code: str | None, title: str | None, author: str | None) -> 
         product = _open_library_lookup(code, title, author)
     except Exception as exc:
         logger.info(f"Open Library lookup failed ({exc}), trying Google Books fallback")
-        result = _google_books_search(code=code, title=title, author=author)
+        try:
+            result = _google_books_search(code=code, title=title, author=author)
+        except Exception as fallback_exc:
+            # The fallback must never replace the original lookup failure.
+            logger.warning(f"Google Books fallback failed: {fallback_exc}")
+            result = None
         if result and result.get("title"):
             logger.info(f"Google Books found: {result}")
             return result
