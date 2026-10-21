@@ -7,6 +7,17 @@ from pydantic import BaseModel, HttpUrl, field_validator, model_validator
 from app.config import CODE_RE
 
 
+class ExternalIdProduct(BaseModel):
+    product_id: str
+    code: str | None = None
+    title: str | None = None
+    price: float | None = None
+
+
+class ExternalIdRequest(BaseModel):
+    products: list[ExternalIdProduct]
+
+
 class LookupRequest(BaseModel):
     code: str | None = None
     title: str | None = None

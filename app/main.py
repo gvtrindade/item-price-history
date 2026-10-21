@@ -11,6 +11,10 @@ Flow:
   4. Reserve the copy's external id in the Ziontech (megabazar) catalog.
   5. Deliver the estimate (code, title, author, price, estimated value,
      external id) -- or the error -- to the webhook.
+
+Products whose valuation succeeded but whose external id could not be reserved
+can be registered later in batches through ``POST /external-ids`` (up to 100
+products per Ziontech call; larger lists are chunked automatically).
 """
 
 from __future__ import annotations
@@ -20,12 +24,12 @@ from starlette.concurrency import run_in_threadpool
 
 from app.product_lookup import resolve_product
 from app.config import logger
-from app.schemas import LookupRequest
+from app.schemas import ExternalIdRequest, LookupRequest
 from app.valuation import estimate_price
 from app.webhook import deliver_webhook
-from app.ziontech import create_external_id
+from app.ziontech import MAX_ITEMS_PER_REQUEST, create_external_id, create_external_ids
 
-app = FastAPI(title="Product Price Finder", version="0.2.0")
+app = FastAPI(title="Product Price Finder", version="0.3.0")
 
 
 @app.get("/health")
@@ -110,3 +114,33 @@ async def lookup(request: LookupRequest, background_tasks: BackgroundTasks) -> d
     logger.info(f"Lookup request: code={request.code}, title={request.title}, author={request.author}")
     background_tasks.add_task(_process_lookup, request)
     return {"status": "accepted", "message": "Request received, processing in background"}
+
+
+@app.post("/external-ids")
+async def register_external_ids(request: ExternalIdRequest) -> dict:
+    """Reserve Ziontech external ids for products that are missing them.
+
+    The upstream endpoint accepts at most 100 items per call; the Ziontech
+    client chunks larger requests automatically.
+    """
+    logger.info(
+        "External id request: %d product(s), batches of %d",
+        len(request.products),
+        MAX_ITEMS_PER_REQUEST,
+    )
+    external_ids = await create_external_ids(
+        [
+            {
+                "code": product.code,
+                "title": product.title,
+                "price": product.price,
+            }
+            for product in request.products
+        ]
+    )
+    return {
+        "results": [
+            {"product_id": product.product_id, "external_id": external_id}
+            for product, external_id in zip(request.products, external_ids)
+        ]
+    }

@@ -119,6 +119,31 @@ or, on failure (product not found, LLM/SearXNG error, ...):
 The endpoint's own response echoes the payload plus `webhook_delivered`
 (whether the webhook accepted it).
 
+### Registering missing external ids
+
+When Ziontech fails during `/lookup`, the product is still valued but has no
+external id. Such products can be registered later, in batches:
+
+```bash
+curl -X POST http://localhost:8000/external-ids \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "products": [
+      {"product_id": "abc", "code": "9780140449136", "title": "Crime and punishment", "price": 47.92}
+    ]
+  }'
+```
+
+The response maps every product back to its id (or `null` when Ziontech could
+not register it):
+
+```json
+{"results": [{"product_id": "abc", "external_id": "12345"}]}
+```
+
+Ziontech accepts at most **100 products per call**; the service splits larger
+lists into batches automatically.
+
 ## SearXNG (docker compose)
 
 ```bash
