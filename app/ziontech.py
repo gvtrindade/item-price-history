@@ -60,6 +60,16 @@ async def _request_external_ids(items: list[dict]) -> list[str | None]:
                 },
                 json={"itens": items},
             )
+            if response.is_error:
+                # The upstream explains why it rejected the batch in the body;
+                # raise_for_status() alone discards that information.
+                logger.error(
+                    "Ziontech: external id request rejected "
+                    "(status=%d, items=%d): %s",
+                    response.status_code,
+                    len(items),
+                    response.text[:2000],
+                )
             response.raise_for_status()
             data = response.json()
     except (httpx.HTTPError, ValueError) as exc:
