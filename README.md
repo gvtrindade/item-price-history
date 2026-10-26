@@ -106,7 +106,7 @@ The webhook receives:
   "estimated_value": 47.92,
   "external_id": "12345",
   "currency": "BRL",
-  "summary": "Cópias usadas a R$ 39,90 na Estante Virtual; ..."
+  "summary": "Cópias usadas a R$ 39,90; ..."
 }
 ```
 
@@ -118,6 +118,54 @@ or, on failure (product not found, LLM/SearXNG error, ...):
 
 The endpoint's own response echoes the payload plus `webhook_delivered`
 (whether the webhook accepted it).
+
+## Bookstore + laya flow
+
+`POST /lookup/bookstore` is an alternative lookup that skips Open
+Library, SearXNG and the generative LLM entirely:
+
+```
+POST /lookup/bookstore {code | title+author, conservation_state, webhook_url}
+  -> bookstore: crawl the search page
+     (ISBN: /busca/<isbn>, falling back to /busca?nsCat=Natural&q=<isbn>
+      when the path URL hits the bot wall;
+      title+author: /busca?nsCat=Natural&q=<title author>&searchField=titulo-autor)
+  -> trim: the 200KB-1.5MB HTML is reduced to the embedded
+     window.__INITIAL_STATE__ JSON, then to a compact candidate list
+     (title, author, isbn, condition, price per listing)
+  -> laya (https://github.com/NandhaKishorM/laya, in-process typed-decision
+     engine): a choice question identifies which candidate IS the book --
+     sellers sometimes attach the wrong ISBN to a listing -- then one
+     yes/no question per candidate decides which listings are copies of it
+  -> pricing rules: used_price = cheapest used match, new_price = cheapest
+     new match, estimated_value = same conservation-state ratios as /lookup
+  -> webhook: POST {code, title, author, new_price, used_price,
+     estimated_value, currency, summary, source: "bookstore", ...}
+```
+
+The request body and webhook contract are the same as `/lookup`.
+
+laya runs in-process via its Python SDK: the first prediction downloads the
+pinned checkpoint (multilingual by default, ~650MB) into the Hugging Face
+cache. On machines without CUDA, install CPU-only torch **before** laya to
+avoid the multi-GB nvidia wheels:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install laya
+```
+
+| env var                     | default                            | purpose                          |
+|-----------------------------|------------------------------------|----------------------------------|
+| `BOOKSTORE_BASE_URL`        | `https://www.estantevirtual.com.br`| search site base URL             |
+| `BOOKSTORE_TIMEOUT_SECONDS` | `20`                               | per-request crawl timeout        |
+| `BOOKSTORE_MAX_CANDIDATES`  | `20`                               | max listings sent to laya        |
+| `LAYA_MATCH_THRESHOLD`      | `0.9`                              | min P(yes) for a listing to match|
+| `LAYA_MODEL`                | `multilingual`                     | laya checkpoint per predict call |
+
+Keep the threshold strict: a wrong listing corrupts the minimum price, while
+a missed listing rarely changes it. Example saved search pages live in
+`examples/` for offline testing of the trim/match steps.
 
 ### Registering missing external ids
 

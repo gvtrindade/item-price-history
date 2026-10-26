@@ -33,8 +33,8 @@ VALUATION_SYSTEM_PROMPT = """\
 You are a product pricing assistant. Given a product's code, title and author,
 find its current prices on the BRAZILIAN internet:
 - the price of a NEW copy (new_price);
-- the price of USED copies (used_price), e.g. on Estante Virtual,
-  Mercado Livre, sebos, Amazon.com.br, Americanas or Shopee Brasil.
+- the price of USED copies (used_price), e.g. on Mercado Livre, sebos,
+  Amazon.com.br, Americanas or Shopee Brasil.
 All prices MUST come from Brazilian listings and be in BRL (R$); never
 use prices quoted in another currency. Prefer Portuguese queries: combine
 the product's title and author with price terms, e.g. "O Cortiço Aluísio

@@ -50,6 +50,20 @@ SEARXNG_MAX_RESULTS = 5
 SEARXNG_COUNTRY = os.getenv("SEARXNG_COUNTRY", "br")
 SEARXNG_LANGUAGE = os.getenv("SEARXNG_LANGUAGE", "pt-BR")
 
+# Bookstore search crawler (laya flow): fetches the search results page
+# and trims it to the embedded window.__INITIAL_STATE__ candidate listings.
+BOOKSTORE_BASE_URL = os.getenv(
+    "BOOKSTORE_BASE_URL", "https://www.estantevirtual.com.br"
+).rstrip("/")
+BOOKSTORE_TIMEOUT_SECONDS = float(os.getenv("BOOKSTORE_TIMEOUT_SECONDS", "20"))
+BOOKSTORE_MAX_CANDIDATES = int(os.getenv("BOOKSTORE_MAX_CANDIDATES", "20"))
+
+# laya (typed-decision engine): picks which bookstore listings match the
+# requested book. Minimum P(yes) for a listing to count as a match. Strict on
+# purpose: a wrong listing corrupts the minimum price, a missed one rarely does.
+LAYA_MATCH_THRESHOLD = float(os.getenv("LAYA_MATCH_THRESHOLD", "0.9"))
+LAYA_MODEL = os.getenv("LAYA_MODEL", "multilingual")
+
 GOOGLE_BOOKS_BASE_URL = "https://www.googleapis.com/books/v1"
 GOOGLE_BOOKS_TIMEOUT_SECONDS = 10.0
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY", "")
