@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, HttpUrl, field_validator, model_validator
 
-from app.config import CODE_RE
+from app.config import CODE_RE, DISC_CODE_RE
 
 
 class LookupRequest(BaseModel):
@@ -37,3 +37,17 @@ class LookupRequest(BaseModel):
         if not self.code and not (self.title and self.author):
             raise ValueError("provide either 'code' or both 'title' and 'author'")
         return self
+
+
+class DiscogsLookupRequest(BaseModel):
+    """CD/DVD barcode lookup. Not an ISBN, so no ISBN validation."""
+
+    code: str
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        value = value.strip().replace("-", "").replace(" ", "")
+        if not DISC_CODE_RE.match(value):
+            raise ValueError("code must be an 8-14 digit EAN/UPC barcode")
+        return value

@@ -19,11 +19,15 @@ search page (by ISBN or title+author), trims the HTML to the embedded
 candidate listings, asks laya (a typed-decision engine) which listings are
 copies of the requested book, applies the same pricing rules and delivers the
 result to the webhook.
+
+``POST /lookup/discogs`` handles CDs: it resolves the barcode on Discogs and
+returns the release title/artist synchronously. No price is estimated for
+these products.
 """
 
 from __future__ import annotations
 
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from app.book_matcher import match_book_listings
@@ -32,9 +36,10 @@ from app.bookstore import (
     extract_candidates,
     fetch_search_page,
 )
+from app.discogs import DiscogsError, lookup_by_barcode
 from app.product_lookup import resolve_product
 from app.config import logger
-from app.schemas import LookupRequest
+from app.schemas import DiscogsLookupRequest, LookupRequest
 from app.valuation import estimate_price
 from app.webhook import deliver_webhook
 
@@ -206,3 +211,28 @@ async def lookup_bookstore(
     )
     background_tasks.add_task(_process_bookstore_lookup, request)
     return {"status": "accepted", "message": "Request received, processing in background"}
+
+
+@app.post("/lookup/discogs")
+async def lookup_discogs(request: DiscogsLookupRequest) -> dict:
+    """CD barcode lookup: metadata from Discogs, no price estimation.
+
+    Runs synchronously because Discogs answers in a couple of quick requests;
+    the caller needs the title/artist right away to finish registering the CD.
+    """
+    logger.info("Discogs lookup request: code=%s", request.code)
+    try:
+        result = await run_in_threadpool(lookup_by_barcode, request.code)
+    except DiscogsError as exc:
+        logger.error("Discogs lookup failed for code=%s: %s", request.code, exc)
+        # Keep the machine-readable prefix as the detail ("discogs_rate_limited",
+        # ...); the exception text may carry request details.
+        raise HTTPException(status_code=502, detail=str(exc).split(":", 1)[0]) from exc
+
+    if result is None:
+        return {"status": "not_found"}
+    return {
+        "status": "ok",
+        "title": result.get("title") or "",
+        "artist": result.get("artist") or "",
+    }

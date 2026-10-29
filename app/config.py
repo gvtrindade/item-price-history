@@ -68,4 +68,15 @@ GOOGLE_BOOKS_BASE_URL = "https://www.googleapis.com/books/v1"
 GOOGLE_BOOKS_TIMEOUT_SECONDS = 10.0
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY", "")
 
+# Discogs (CD barcode lookup): metadata only, no price estimation. A free
+# personal access token from https://www.discogs.com/settings/developers is
+# required for the database search endpoint.
+DISCOGS_BASE_URL = os.getenv("DISCOGS_BASE_URL", "https://api.discogs.com").rstrip("/")
+DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN", "")
+DISCOGS_USER_AGENT = os.getenv("DISCOGS_USER_AGENT", "PriceReg/1.0")
+DISCOGS_TIMEOUT_SECONDS = float(os.getenv("DISCOGS_TIMEOUT_SECONDS", "10"))
+
 CODE_RE = re.compile(r"^(?:\d{9}[\dXx]|\d{13})$")
+
+# CDs/DVDs use plain EAN/UPC barcodes (EAN-8, UPC-A, EAN-13), not ISBNs.
+DISC_CODE_RE = re.compile(r"^\d{8,14}$")

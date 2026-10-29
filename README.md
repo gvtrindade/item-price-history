@@ -164,6 +164,40 @@ Keep the threshold strict: a wrong listing corrupts the minimum price, while
 a missed listing rarely changes it. Example saved search pages live in
 `examples/` for offline testing of the trim/match steps.
 
+## Discogs flow (CDs)
+
+`POST /lookup/discogs` resolves a CD barcode to its title and artist on
+[Discogs](https://www.discogs.com). It is **synchronous** -- no webhook, no
+price estimation, no conservation state: CDs and DVDs are priced manually by
+the caller.
+
+```
+POST /lookup/discogs {code}    # any 8-14 digit EAN/UPC, not an ISBN
+  -> Discogs database search by barcode (type=release)
+  -> first hit -> release details (title + joined artist names)
+  -> response: {"status": "ok", "title": "...", "artist": "..."}
+     or        {"status": "not_found"}               # e.g. most DVDs
+     or        HTTP 502 {"detail": "discogs_*"}      # auth/rate-limit/outage
+```
+
+Requires a free personal access token from
+<https://www.discogs.com/settings/developers>:
+
+```bash
+curl -X POST http://localhost:8000/lookup/discogs \
+  -H 'Content-Type: application/json' \
+  -d '{"code": "602527452715"}'
+```
+
+Discogs only catalogs music releases, so DVDs (and CDs without a Discogs
+entry) come back as `not_found` and are completed manually by the caller.
+
+| env var                    | default                  | purpose                          |
+|----------------------------|--------------------------|----------------------------------|
+| `DISCOGS_TOKEN`            | *(empty)*                | personal access token (required) |
+| `DISCOGS_USER_AGENT`       | `PriceReg/1.0`           | User-Agent header Discogs asks for |
+| `DISCOGS_TIMEOUT_SECONDS`  | `10`                     | per-request timeout              |
+
 ## SearXNG (docker compose)
 
 ```bash
