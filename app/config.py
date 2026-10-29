@@ -68,12 +68,4 @@ GOOGLE_BOOKS_BASE_URL = "https://www.googleapis.com/books/v1"
 GOOGLE_BOOKS_TIMEOUT_SECONDS = 10.0
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY", "")
 
-# Ziontech (megabazar) catalog integration: reserves the external product id
-# (id_produtos) used for the printed label's {{e_id}} and QR code.
-ZIONTECH_URL = os.getenv(
-    "ZIONTECH_URL", "https://dev.ziontech.app/apiJPA/megabazarIntegracao.php"
-)
-ZIONTECH_TOKEN = os.getenv("ZIONTECH_TOKEN", "")
-ZIONTECH_TIMEOUT_SECONDS = float(os.getenv("ZIONTECH_TIMEOUT_SECONDS", "10"))
-
 CODE_RE = re.compile(r"^(?:\d{9}[\dXx]|\d{13})$")

@@ -8,13 +8,11 @@ Flow:
   3. Ask a llama.cpp instance (OpenAI-compatible /v1/chat/completions) to
      search the Brazilian web through SearXNG for new/used prices in BRL
      and return an estimated value for the (always used) copy as JSON.
-  4. Reserve the copy's external id in the Ziontech (megabazar) catalog.
-  5. Deliver the estimate (code, title, author, price, estimated value,
-     external id) -- or the error -- to the webhook.
+  4. Deliver the estimate (code, title, author, price, estimated value) -- or
+     the error -- to the webhook.
 
-Products whose valuation succeeded but whose external id could not be reserved
-can be registered later in batches through ``POST /external-ids`` (up to 100
-products per Ziontech call; larger lists are chunked automatically).
+The external catalog id (Ziontech/megabazar) is reserved by the printer service
+at print time, not here.
 
 ``POST /lookup/bookstore`` is an alternative flow: it crawls the bookstore
 search page (by ISBN or title+author), trims the HTML to the embedded
@@ -36,10 +34,9 @@ from app.bookstore import (
 )
 from app.product_lookup import resolve_product
 from app.config import logger
-from app.schemas import ExternalIdRequest, LookupRequest
+from app.schemas import LookupRequest
 from app.valuation import estimate_price
 from app.webhook import deliver_webhook
-from app.ziontech import MAX_ITEMS_PER_REQUEST, create_external_id, create_external_ids
 
 app = FastAPI(title="Product Price Finder", version="0.4.0")
 
@@ -94,19 +91,6 @@ async def _process_lookup(request: LookupRequest) -> None:
         }
         if payload["status"] == "error":
             payload["error"] = "No BRL price found for this product in Brazilian listings"
-        else:
-            try:
-                external_id = await create_external_id(
-                    product.get("code"),
-                    product.get("title"),
-                    valuation.get("estimated_value"),
-                )
-            except Exception:
-                # Reserving the external id must never invalidate a good valuation.
-                logger.exception("Ziontech external id lookup failed")
-                external_id = None
-            if external_id is not None:
-                payload["external_id"] = external_id
     except Exception as exc:
         logger.exception("Price estimation failed for code=%s", product["code"])
         payload = {
@@ -208,17 +192,6 @@ async def _process_bookstore_lookup(request: LookupRequest) -> None:
     }
     if payload["status"] == "error":
         payload["error"] = "No BRL price found for this book on the bookstore"
-    else:
-        try:
-            external_id = await create_external_id(
-                payload["code"], payload["title"], valuation.get("estimated_value")
-            )
-        except Exception:
-            # Reserving the external id must never invalidate a good valuation.
-            logger.exception("Ziontech external id lookup failed")
-            external_id = None
-        if external_id is not None:
-            payload["external_id"] = external_id
 
     await deliver_webhook(str(request.webhook_url), payload)
 
@@ -233,33 +206,3 @@ async def lookup_bookstore(
     )
     background_tasks.add_task(_process_bookstore_lookup, request)
     return {"status": "accepted", "message": "Request received, processing in background"}
-
-
-@app.post("/external-ids")
-async def register_external_ids(request: ExternalIdRequest) -> dict:
-    """Reserve Ziontech external ids for products that are missing them.
-
-    The upstream endpoint accepts at most 100 items per call; the Ziontech
-    client chunks larger requests automatically.
-    """
-    logger.info(
-        "External id request: %d product(s), batches of %d",
-        len(request.products),
-        MAX_ITEMS_PER_REQUEST,
-    )
-    external_ids = await create_external_ids(
-        [
-            {
-                "code": product.code,
-                "title": product.title,
-                "price": product.price,
-            }
-            for product in request.products
-        ]
-    )
-    return {
-        "results": [
-            {"product_id": product.product_id, "external_id": external_id}
-            for product, external_id in zip(request.products, external_ids)
-        ]
-    }

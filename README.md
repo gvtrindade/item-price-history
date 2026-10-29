@@ -63,8 +63,6 @@ Dependencies (started separately):
 | `SEARXNG_BASE_URL`         | `http://localhost:8080`    | SearXNG instance URL          |
 | `SEARXNG_COUNTRY`          | `br`                       | SearXNG country boost         |
 | `SEARXNG_LANGUAGE`         | `pt-BR`                    | SearXNG language/locale       |
-| `ZIONTECH_URL`             | dev megabazar endpoint     | Ziontech catalog endpoint     |
-| `ZIONTECH_TOKEN`           | *(empty)*                  | Ziontech Bearer token (secret)|
 
 ## Usage
 
@@ -104,7 +102,6 @@ The webhook receives:
   "new_price": 59.9,
   "used_price": 39.9,
   "estimated_value": 47.92,
-  "external_id": "12345",
   "currency": "BRL",
   "summary": "Cópias usadas a R$ 39,90; ..."
 }
@@ -166,31 +163,6 @@ pip install laya
 Keep the threshold strict: a wrong listing corrupts the minimum price, while
 a missed listing rarely changes it. Example saved search pages live in
 `examples/` for offline testing of the trim/match steps.
-
-### Registering missing external ids
-
-When Ziontech fails during `/lookup`, the product is still valued but has no
-external id. Such products can be registered later, in batches:
-
-```bash
-curl -X POST http://localhost:8000/external-ids \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "products": [
-      {"product_id": "abc", "code": "9780140449136", "title": "Crime and punishment", "price": 47.92}
-    ]
-  }'
-```
-
-The response maps every product back to its id (or `null` when Ziontech could
-not register it):
-
-```json
-{"results": [{"product_id": "abc", "external_id": "12345"}]}
-```
-
-Ziontech accepts at most **100 products per call**; the service splits larger
-lists into batches automatically.
 
 ## SearXNG (docker compose)
 
