@@ -13,6 +13,9 @@ class LookupRequest(BaseModel):
     author: str | None = None
     conservation_state: str
     webhook_url: HttpUrl
+    # When the caller already knows the price, only resolve the missing
+    # title/author and skip the price estimation entirely.
+    skip_valuation: bool = False
 
     @field_validator("code")
     @classmethod

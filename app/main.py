@@ -85,6 +85,20 @@ async def _process_lookup(request: LookupRequest) -> None:
         await deliver_webhook(str(request.webhook_url), payload)
         return
 
+    if request.skip_valuation:
+        await deliver_webhook(
+            str(request.webhook_url),
+            {
+                "code": product.get("code") or "",
+                "title": product.get("title") or "",
+                "author": product.get("author") or "",
+                "conservation_state": request.conservation_state,
+                "status": "ok",
+                "metadata_only": True,
+            },
+        )
+        return
+
     try:
         valuation = await estimate_price(product, request.conservation_state)
         payload = {
@@ -162,6 +176,7 @@ async def _process_bookstore_lookup(request: LookupRequest) -> None:
             code=request.code,
             title=request.title,
             author=request.author,
+            skip_valuation=request.skip_valuation,
         )
     except Exception as exc:
         logger.exception("laya matching failed")
@@ -179,6 +194,20 @@ async def _process_bookstore_lookup(request: LookupRequest) -> None:
         await deliver_webhook(
             str(request.webhook_url),
             {**base_payload, "status": "not_found"},
+        )
+        return
+
+    if request.skip_valuation:
+        await deliver_webhook(
+            str(request.webhook_url),
+            {
+                **base_payload,
+                "code": result["code"] or "",
+                "title": result["title"] or "",
+                "author": result["author"] or "",
+                "status": "ok",
+                "metadata_only": True,
+            },
         )
         return
 

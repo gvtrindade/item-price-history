@@ -173,6 +173,7 @@ async def match_book_listings(
     code: str | None = None,
     title: str | None = None,
     author: str | None = None,
+    skip_valuation: bool = False,
 ) -> dict | None:
     """Full laya matching flow. Returns book data + valuation, or None when no
     candidate listing matches the requested book."""
@@ -188,7 +189,11 @@ async def match_book_listings(
     if not matches:
         return None
 
-    valuation = _valuation_from_matches(matches, conservation_state)
+    # Metadata-only lookups (the price was already informed by the volunteer)
+    # still need the matching step to know which listing is the right book.
+    valuation = (
+        {} if skip_valuation else _valuation_from_matches(matches, conservation_state)
+    )
     return {
         "code": code or reference["isbn"] or "",
         "title": reference["title"],
