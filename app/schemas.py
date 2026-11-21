@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, HttpUrl, field_validator, model_validator
 
 from app.config import CODE_RE, DISC_CODE_RE
 
+# The caller states what the product is; the barcode shape is never used to
+# guess it.
+ProductType = Literal["book", "cd", "dvd"]
+
 
 class LookupRequest(BaseModel):
+    product_type: ProductType = "book"
     code: str | None = None
     title: str | None = None
     author: str | None = None
@@ -45,6 +52,7 @@ class LookupRequest(BaseModel):
 class DiscogsLookupRequest(BaseModel):
     """CD/DVD barcode lookup. Not an ISBN, so no ISBN validation."""
 
+    product_type: ProductType = "cd"
     code: str
 
     @field_validator("code")

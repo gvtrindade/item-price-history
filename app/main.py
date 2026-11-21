@@ -63,6 +63,7 @@ async def _process_lookup(request: LookupRequest) -> None:
             request.code, request.title, request.author, exc,
         )
         payload = {
+            "product_type": request.product_type,
             "code": request.code or "",
             "title": request.title or "",
             "author": request.author or "",
@@ -76,6 +77,7 @@ async def _process_lookup(request: LookupRequest) -> None:
             "Open Library lookup failed for code=%s title=%s", request.code, request.title
         )
         payload = {
+            "product_type": request.product_type,
             "code": request.code or "",
             "title": request.title or "",
             "author": request.author or "",
@@ -89,6 +91,7 @@ async def _process_lookup(request: LookupRequest) -> None:
         await deliver_webhook(
             str(request.webhook_url),
             {
+                "product_type": request.product_type,
                 "code": product.get("code") or "",
                 "title": product.get("title") or "",
                 "author": product.get("author") or "",
@@ -102,6 +105,7 @@ async def _process_lookup(request: LookupRequest) -> None:
     try:
         valuation = await estimate_price(product, request.conservation_state)
         payload = {
+            "product_type": request.product_type,
             "code": product.get("code") or "",
             "title": product.get("title") or "",
             "author": product.get("author") or "",
@@ -114,6 +118,7 @@ async def _process_lookup(request: LookupRequest) -> None:
         logger.exception("Price estimation failed for code=%s", product["code"])
         payload = {
             **product,
+            "product_type": request.product_type,
             "code": product.get("code") or "",
             "title": product.get("title") or "",
             "author": product.get("author") or "",
@@ -134,6 +139,7 @@ async def lookup(request: LookupRequest, background_tasks: BackgroundTasks) -> d
 async def _process_bookstore_lookup(request: LookupRequest) -> None:
     """Bookstore + laya flow: crawl, trim, match, price, webhook."""
     base_payload = {
+        "product_type": request.product_type,
         "code": request.code or "",
         "title": request.title or "",
         "author": request.author or "",
@@ -235,8 +241,8 @@ async def lookup_bookstore(
     request: LookupRequest, background_tasks: BackgroundTasks
 ) -> dict:
     logger.info(
-        f"Bookstore lookup request: code={request.code}, "
-        f"title={request.title}, author={request.author}"
+        f"Bookstore lookup request: type={request.product_type}, "
+        f"code={request.code}, title={request.title}, author={request.author}"
     )
     background_tasks.add_task(_process_bookstore_lookup, request)
     return {"status": "accepted", "message": "Request received, processing in background"}
@@ -249,7 +255,11 @@ async def lookup_discogs(request: DiscogsLookupRequest) -> dict:
     Runs synchronously because Discogs answers in a couple of quick requests;
     the caller needs the title/artist right away to finish registering the CD.
     """
-    logger.info("Discogs lookup request: code=%s", request.code)
+    logger.info(
+        "Discogs lookup request: type=%s, code=%s",
+        request.product_type,
+        request.code,
+    )
     try:
         result = await run_in_threadpool(lookup_by_barcode, request.code)
     except DiscogsError as exc:

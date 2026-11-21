@@ -84,6 +84,7 @@ Request body:
 
 | field                | description                                          |
 |----------------------|------------------------------------------------------|
+| `product_type`       | `book`, `cd` or `dvd` (default `book`); the caller states the type, it is never inferred from the code |
 | `code`               | code (ISBN-10 or ISBN-13, hyphens allowed); **or** give |
 | `title` + `author`   | product title and author so the code gets resolved    |
 | `conservation_state` | condition of the (used) copy, e.g. `like new`, `good`, `acceptable, worn` |
@@ -122,7 +123,7 @@ The endpoint's own response echoes the payload plus `webhook_delivered`
 Library, SearXNG and the generative LLM entirely:
 
 ```
-POST /lookup/bookstore {code | title+author, conservation_state, webhook_url}
+POST /lookup/bookstore {product_type: "book", code | title+author, conservation_state, webhook_url}
   -> bookstore: crawl the search page
      (ISBN: /busca/<isbn>, falling back to /busca?nsCat=Natural&q=<isbn>
       when the path URL hits the bot wall;
@@ -172,7 +173,7 @@ price estimation, no conservation state: CDs and DVDs are priced manually by
 the caller.
 
 ```
-POST /lookup/discogs {code}    # any 8-14 digit EAN/UPC, not an ISBN
+POST /lookup/discogs {product_type: "cd" | "dvd", code}    # any 8-14 digit EAN/UPC, not an ISBN
   -> Discogs database search by barcode (type=release)
   -> first hit -> release details (title + joined artist names)
   -> response: {"status": "ok", "title": "...", "artist": "..."}
@@ -186,7 +187,7 @@ Requires a free personal access token from
 ```bash
 curl -X POST http://localhost:8000/lookup/discogs \
   -H 'Content-Type: application/json' \
-  -d '{"code": "602527452715"}'
+  -d '{"product_type": "cd", "code": "602527452715"}'
 ```
 
 Discogs only catalogs music releases, so DVDs (and CDs without a Discogs
